@@ -3,11 +3,20 @@
 # Importing a maven image for the builder
 FROM maven:3.9.9-eclipse-temurin-17 as builder
 
-# Setting up the working directory to /src
-WORKDIR /src
+
+# Setting up the working directory to /app
+WORKDIR /app
+
+
+# Copy only pom first (better Docker caching)
+COPY pom.xml .
+
+# Download dependencies first
+RUN mvn dependency:go-offline
+
 
 # Copying the source code from local to container
-COPY . /src
+COPY src ./src
 
 # Building the application and skipping the tests
 RUN mvn clean package -DskipTests=true
@@ -16,13 +25,13 @@ RUN mvn clean package -DskipTests=true
 
 
 # Importing an alpine image for deployer
-FROM eclipse-temurin:17-jdk-alpine as deployer
+FROM eclipse-temurin:17-jre-alpine
 
 # copying the jar files from the builder
-COPY --from=builder /src/target/*.jar /src/target/bankapp.jar
+COPY --from=builder /app/target/*.jar bankapp.jar
 
 # Exposing the port to 8080
 EXPOSE 8080
 
 # Starting the application
-ENTRYPOINT [ "java" , "-jar" , "/src/target/bankapp.jar" ]
+ENTRYPOINT [ "java" , "-jar" , "bankapp.jar" ]
