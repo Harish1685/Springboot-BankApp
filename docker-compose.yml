@@ -24,9 +24,7 @@ services:
     
 
   mainapp:
-    build:
-      context: .
-    container_name: bank-app
+    image: zorochan/bank-app
     ports:
       - "8080:8080"
     networks:
