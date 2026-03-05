@@ -5,7 +5,6 @@ pipeline {
         IMAGE_NAME = "bank-app"
         DOCKER_REPO = "zorochan/bank-app"
         SONAR_HOME = tool "Sonar"
-        BUILD_NUMBER = BUILD_NUMBER
     }
 
     stages {
@@ -40,14 +39,13 @@ pipeline {
 
         stage("Docker Build") {
             steps {
-                sh "docker build -t $IMAGE_NAME ."
-                sh "docker tag $IMAGE_NAME $DOCKER_REPO:$BUILD_NUMBER"
+                sh "docker build -t $DOCKER_REPO:$BUILD_NUMBER ."
             }
         }
 
         stage("Trivy Scan") {
             steps {
-                sh "trivy image $DOCKER_REPO:$BUILD_NUMBER"
+                sh "trivy image --timeout 15m $IMAGE_NAME"
             }
         }
 
@@ -61,11 +59,25 @@ pipeline {
 
                     sh '''
                     echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    docker push zorochan/bank-app:$BUILD_NUMBER
+                    docker tag $IMAGE_NAME $DOCKER_REPO:$BUILD_NUMBER
+                    docker push $DOCKER_REPO:$BUILD_NUMBER
+
                     '''
                 }
             }
         }
+
+        stage("Load ENV file") {
+            steps {
+                withCredentials([file(credentialsId: 'bankapp-env', variable: 'ENV_FILE')]) { 
+                    sh ''' cp $ENV_FILE .env ''' 
+                    
+                } 
+                
+            } 
+            
+        }
+
 
         stage("Deploy") {
             steps {
