@@ -67,22 +67,23 @@ pipeline {
             }
         }
 
-        stage("Load ENV file") {
+        stage("apply mannifest files and deploy to new version") {
             steps {
-                withCredentials([file(credentialsId: 'bankapp-env', variable: 'ENV_FILE')]) { 
-                    sh ''' cp $ENV_FILE .env ''' 
-                    
-                } 
+                 sh '''
+                kubectl apply -f kubernetes/bankapp-namespace.yml
+
+                sleep 5
                 
-            } 
-            
-        }
+                kubectl apply -f kubernetes/
 
+                kubectl set image deployment/bank-app bank-app=$DOCKER_REPO:$BUILD_NUMBER -n bankapp-namespace 
 
-        stage("Deploy") {
-            steps {
-                sh "docker compose down"
-                sh "docker compose up -d"
+                kubectl rollout status deployment/bank-app -n bankapp-namespace --timeout=300s
+
+                kubectl wait --for=condition=ready pod -l app=bank-app -n bankapp-namespace --timeout=300s
+
+                kubectl get pods -n bankapp-namespace
+            '''
             }
         }
     }
