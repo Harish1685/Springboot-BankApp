@@ -8,7 +8,7 @@ FROM maven:3.9.9-eclipse-temurin-17 as builder
 WORKDIR /app
 
 
-# Copy only pom first (better Docker caching)
+# Copying  only pom first (for better Docker caching)
 COPY pom.xml .
 
 # Download dependencies first
