@@ -67,24 +67,36 @@ pipeline {
             }
         }
 
-        stage("apply mannifest files and deploy to new version") {
-            steps {
-                 sh '''
-                kubectl apply -f kubernetes/bankapp-namespace.yml
-
-                sleep 5
+        stage("Update argoCD manifests"){
+            steps{
                 
-                kubectl apply -f kubernetes/
-
-                kubectl set image deployment/bank-app bank-app=$DOCKER_REPO:$BUILD_NUMBER -n bankapp-namespace 
-
-                kubectl rollout status deployment/bank-app -n bankapp-namespace --timeout=300s
-
-                kubectl wait --for=condition=ready pod -l app=bank-app -n bankapp-namespace --timeout=300s
-
-                kubectl get pods -n bankapp-namespace
-            '''
+                withCredentials([gitUsernamePassword(
+                    credentialsId: "githubID", 
+                    usernameVariable: "GIT_USER"
+                    passwordVariable: "GIT_PASS")]) {
+                        
+                    sh '''
+                    # clone maifests repo 
+                    
+                    git clone https://$GIT_USER:$GIT_PASS@github.com/Harish1685/Springboot-BankApp.git
+                    cd Springboot-BankApp/kubernetes/base
+                    
+                    # Update deployment image tag
+                    
+                    sed -i "s|image: .*|image: $DOCKER_REPO:$BUILD_NUMBER|" bankapp-deployment.yml
+                    
+                    # Commit & push changes
+                    
+                    git config user.name "Harish1685"
+                    git config user.email "kumarharish1680@gmail.com"
+                    git add .
+                    git commit -m "Update bank-app image to $BUILD_NUMBER"
+                    git push -u origin main
+                    
+                    '''
+                     
+                    }
+                
             }
-        }
     }
 }
