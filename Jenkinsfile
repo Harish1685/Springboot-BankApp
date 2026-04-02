@@ -45,7 +45,7 @@ pipeline {
 
         stage("Trivy Scan") {
             steps {
-                sh "trivy image --timeout 15m $IMAGE_NAME"
+                sh "trivy image --timeout 15m $DOCKER_REPO:$BUILD_NUMBER"
             }
         }
 
@@ -72,18 +72,18 @@ pipeline {
                 
                 withCredentials([gitUsernamePassword(
                     credentialsId: "githubID", 
-                    usernameVariable: "GIT_USER"
+                    usernameVariable: "GIT_USER",
                     passwordVariable: "GIT_PASS")]) {
                         
                     sh '''
                     # clone maifests repo 
                     
-                    git clone https://$GIT_USER:$GIT_PASS@github.com/Harish1685/Springboot-BankApp.git
+                    git clone https://$GIT_USER:$GIT_PASS@github.com/Harish1685/Springboot-BankApp-GitOps.git
                     cd Springboot-BankApp/kubernetes/base
                     
                     # Update deployment image tag
                     
-                    sed -i "s|image: .*|image: $DOCKER_REPO:$BUILD_NUMBER|" bankapp-deployment.yml
+                    sed -i "s|image: zorochan/bank-app:.*|image: $DOCKER_REPO:$BUILD_NUMBER|" bankapp-deployment.yml
                     
                     # Commit & push changes
                     
