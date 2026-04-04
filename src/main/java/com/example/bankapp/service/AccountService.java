@@ -92,7 +92,7 @@ public class AccountService implements UserDetailsService {
                 account.getUsername(),
                 account.getPassword(),
                 account.getBalance(),
-                account.getTransactions(),
+                null,
                 authorities());
     }
 
