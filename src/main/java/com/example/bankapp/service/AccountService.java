@@ -97,7 +97,7 @@ public class AccountService implements UserDetailsService {
     }
 
     public Collection<? extends GrantedAuthority> authorities() {
-        return Arrays.asList(new SimpleGrantedAuthority("USER"));
+        return Arrays.asList(new SimpleGrantedAuthority("ROLE_USER"));
     }
 
     public void transferAmount(Account fromAccount, String toUsername, BigDecimal amount) {
