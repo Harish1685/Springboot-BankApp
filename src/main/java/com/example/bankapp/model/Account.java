@@ -14,6 +14,7 @@ public class Account implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     private String username;
     private String password;
     private BigDecimal balance;
@@ -24,11 +25,11 @@ public class Account implements UserDetails {
     @Transient
     private Collection<? extends GrantedAuthority> authorities;
 
-    public Account() {
+    public Account() {}
 
-    }
-
-    public Account(String username, String password, BigDecimal balance, List<Transaction> transactions, Collection<? extends GrantedAuthority> authorities) {
+    public Account(String username, String password, BigDecimal balance,
+                   List<Transaction> transactions,
+                   Collection<? extends GrantedAuthority> authorities) {
         this.username = username;
         this.password = password;
         this.balance = balance;
@@ -36,10 +37,34 @@ public class Account implements UserDetails {
         this.authorities = authorities;
     }
 
+    // ✅ REQUIRED FOR SPRING SECURITY
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return authorities;
     }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
+
+    // ✅ GETTERS & SETTERS
 
     public void setAuthorities(Collection<? extends GrantedAuthority> authorities) {
         this.authorities = authorities;
@@ -53,6 +78,7 @@ public class Account implements UserDetails {
         this.id = id;
     }
 
+    @Override
     public String getUsername() {
         return username;
     }
@@ -61,6 +87,7 @@ public class Account implements UserDetails {
         this.username = username;
     }
 
+    @Override
     public String getPassword() {
         return password;
     }
