@@ -4,7 +4,6 @@ import com.example.bankapp.model.Account;
 import com.example.bankapp.model.Transaction;
 import com.example.bankapp.repository.AccountRepository;
 import com.example.bankapp.repository.TransactionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -22,17 +21,22 @@ import java.util.List;
 @Service
 public class AccountService implements UserDetailsService {
 
-    @Autowired
-    PasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
+    private final AccountRepository accountRepository;
+    private final TransactionRepository transactionRepository;
 
-    @Autowired
-    private AccountRepository accountRepository;
-
-    @Autowired
-    private TransactionRepository transactionRepository;
+    // ✅ CONSTRUCTOR INJECTION (fixes circular dependency)
+    public AccountService(PasswordEncoder passwordEncoder,
+                          AccountRepository accountRepository,
+                          TransactionRepository transactionRepository) {
+        this.passwordEncoder = passwordEncoder;
+        this.accountRepository = accountRepository;
+        this.transactionRepository = transactionRepository;
+    }
 
     public Account findAccountByUsername(String username) {
-        return accountRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("Account not found"));
+        return accountRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Account not found"));
     }
 
     public Account registerAccount(String username, String password) {
@@ -42,11 +46,11 @@ public class AccountService implements UserDetailsService {
 
         Account account = new Account();
         account.setUsername(username);
-        account.setPassword(passwordEncoder.encode(password)); // Encrypt password
-        account.setBalance(BigDecimal.ZERO); // Initial balance set to 0
+        account.setPassword(passwordEncoder.encode(password)); // ✅ BCrypt
+        account.setBalance(BigDecimal.ZERO);
+
         return accountRepository.save(account);
     }
-
 
     public void deposit(Account account, BigDecimal amount) {
         account.setBalance(account.getBalance().add(amount));
@@ -65,6 +69,7 @@ public class AccountService implements UserDetailsService {
         if (account.getBalance().compareTo(amount) < 0) {
             throw new RuntimeException("Insufficient funds");
         }
+
         account.setBalance(account.getBalance().subtract(amount));
         accountRepository.save(account);
 
@@ -81,19 +86,12 @@ public class AccountService implements UserDetailsService {
         return transactionRepository.findByAccountId(account.getId());
     }
 
+    // ✅ CRITICAL: return SAME account, not new object
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-
         Account account = findAccountByUsername(username);
-        if (account == null) {
-            throw new UsernameNotFoundException("Username or Password not found");
-        }
-        return new Account(
-                account.getUsername(),
-                account.getPassword(),
-                account.getBalance(),
-                null,
-                authorities());
+        account.setAuthorities(authorities());
+        return account;
     }
 
     public Collection<? extends GrantedAuthority> authorities() {
@@ -108,15 +106,12 @@ public class AccountService implements UserDetailsService {
         Account toAccount = accountRepository.findByUsername(toUsername)
                 .orElseThrow(() -> new RuntimeException("Recipient account not found"));
 
-        // Deduct from sender's account
         fromAccount.setBalance(fromAccount.getBalance().subtract(amount));
         accountRepository.save(fromAccount);
 
-        // Add to recipient's account
         toAccount.setBalance(toAccount.getBalance().add(amount));
         accountRepository.save(toAccount);
 
-        // Create transaction records for both accounts
         Transaction debitTransaction = new Transaction(
                 amount,
                 "Transfer Out to " + toAccount.getUsername(),
@@ -133,5 +128,4 @@ public class AccountService implements UserDetailsService {
         );
         transactionRepository.save(creditTransaction);
     }
-
 }
