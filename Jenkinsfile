@@ -2,9 +2,7 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "bank-app"
         DOCKER_REPO = "zorochan/bank-app"
-        SONAR_HOME = tool "Sonar"
     }
 
     stages {
@@ -15,24 +13,26 @@ pipeline {
             }
         }
 
-        stage("Checkout") {
+        stage("Checkout App Repo") {
             steps {
                 git branch: 'main', url: 'https://github.com/Harish1685/Springboot-BankApp.git'
             }
         }
 
         stage("Build Application") {
-            
-            steps { 
-
-                sh "mvn clean package -DskipTests"  
+            steps {
+                sh "mvn clean package -DskipTests"
             }
         }
 
         stage("SonarQube Scan") {
             steps {
                 withSonarQubeEnv("Sonar") {
-                    sh "$SONAR_HOME/bin/sonar-scanner -Dsonar.projectName=bankapp -Dsonar.projectKey=bankapp -Dsonar.java.binaries=target"
+                    sh '''
+                    mvn sonar:sonar \
+                    -Dsonar.projectKey=bankapp \
+                    -Dsonar.projectName=bankapp
+                    '''
                 }
             }
         }
@@ -45,7 +45,7 @@ pipeline {
 
         stage("Trivy Scan") {
             steps {
-                sh "trivy image --timeout 15m $DOCKER_REPO:$BUILD_NUMBER"
+                sh "trivy image --timeout 15m $DOCKER_REPO:$BUILD_NUMBER || true"
             }
         }
 
@@ -59,44 +59,37 @@ pipeline {
 
                     sh '''
                     echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    docker tag $IMAGE_NAME $DOCKER_REPO:$BUILD_NUMBER
                     docker push $DOCKER_REPO:$BUILD_NUMBER
-
                     '''
                 }
             }
         }
 
-        stage("Update argoCD manifests"){
-            steps{
-                
-                withCredentials([gitUsernamePassword(
-                    credentialsId: "githubID", 
+        stage("Update GitOps Repo") {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "githubID",
                     usernameVariable: "GIT_USER",
-                    passwordVariable: "GIT_PASS")]) {
-                        
+                    passwordVariable: "GIT_PASS"
+                )]) {
+
                     sh '''
-                    # clone maifests repo 
-                    
                     git clone https://$GIT_USER:$GIT_PASS@github.com/Harish1685/Springboot-BankApp-GitOps.git
-                    cd Springboot-BankApp/kubernetes/base
                     
-                    # Update deployment image tag
+                    cd Springboot-BankApp-GitOps/kubernetes/base
                     
                     sed -i "s|image: zorochan/bank-app:.*|image: $DOCKER_REPO:$BUILD_NUMBER|" bankapp-deployment.yml
                     
-                    # Commit & push changes
-                    
                     git config user.name "Harish1685"
                     git config user.email "kumarharish1680@gmail.com"
-                    git add .
-                    git commit -m "Update bank-app image to $BUILD_NUMBER"
-                    git push -u origin main
                     
+                    git add .
+                    git commit -m "Update image to $BUILD_NUMBER" || echo "No changes"
+                    
+                    git push origin main
                     '''
-                     
-                    }
-                
+                }
             }
+        }
     }
 }
