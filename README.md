@@ -49,7 +49,7 @@ Hardware/OS:
 Linux / Mac / Windows (WSL2)
 4+ CPU cores, 8GB+ RAM recommended for K8s + DB + App + Monitoring
 
-##1️⃣ Basic Tool Installation
+## 1️⃣ Basic Tool Installation
 
 Install these before doing anything else.
 
@@ -291,3 +291,352 @@ Configure:
 🔹 Sonar Scanner
 - Name: sonar-scanner
 - Install automatically
+
+## 9️⃣ ArgoCD Setup (GitOps Controller)
+### 🔹 Step 1 — Install ArgoCD
+```
+kubectl create namespace argocd
+
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+### 🔹 Step 2 — Verify Installation
+```
+kubectl get pods -n argocd
+```
+
+👉 Wait until:
+
+**ALL pods → Running**
+
+⚠️ If anything is CrashLoopBackOff → stop and fix before moving ahead
+
+### 🔹 Step 3 — Expose ArgoCD (NodePort)
+```
+kubectl patch svc argocd-server -n argocd -p '{
+  "spec": {"type": "NodePort"}
+}'
+```
+
+### 🔹 Step 4 — Get Port
+```
+kubectl get svc argocd-server -n argocd
+```
+
+**👉 Note the port like:**
+```
+443:30443
+```
+### 🔹 Step 5 — Access UI
+```
+https://<EC2-IP>:30443
+```
+
+**⚠️ Ignore SSL warning**
+
+## 🔹 Step 6 — Get Admin Password
+```
+kubectl -n argocd get secret argocd-initial-admin-secret \
+-o jsonpath="{.data.password}" | base64 -d; echo
+```
+
+### 🔹 Step 7 — Login
+
+- Username: admin
+- Password: <above output>
+
+## 1️⃣0️⃣ Connect ArgoCD to Repository
+
+### 🔹 Step 8 — Add Git Repository
+
+In ArgoCD UI:
+
+**Settings → Repositories → Connect Repo**
+
+Fill:
+
+- Repo URL → <your-github-repo>
+- Type → Git
+- Auth → (if private use token)
+
+### 🔹 Step 9 — Verify Connection
+
+👉 Repo should show:
+```
+Status: Successful
+```
+## 1️⃣1️⃣ Connect ArgoCD to Cluster
+
+👉 In your case:
+
+**Same cluster (k3s) → already connected ✅**
+
+Verify:
+```
+kubectl config current-context
+```
+
+**👉 In ArgoCD:**
+```
+Settings → Clusters
+```
+
+You should see:
+```
+in-cluster → Connected
+```
+
+## 1️⃣2️⃣ Create ArgoCD Application (Link Repo → Kubernetes)
+
+### 🔹 Step 1 — Go to ArgoCD UI
+
+**Applications → + NEW APP**
+
+### 🔹 Step 2 — Fill Application Details
+
+🔸 General
+- Application Name: bankapp
+- Project: default
+
+🔸Source (VERY IMPORTANT)
+- Repository URL: <your-github-repo>
+- Revision: HEAD
+- Path:
+    k8s/
+
+**👉 This must point to where your Kubernetes YAML files exist.**
+
+🔸 Destination
+- Cluster URL:
+- https://kubernetes.default.svc
+- Namespace:
+    bankapp-namespace
+  
+🔹 Step 3 — Sync Policy
+
+For now:
+
+👉 Select:
+```
+Manual Sync
+```
+
+🔹 Step 4 — Create App
+
+Click:
+```
+Create
+```
+
+Step 5 — Sync Application
+
+Click:
+```
+SYNC → SYNCHRONIZE
+```
+
+**👉 What happens now:**
+```
+ArgoCD → reads repo → applies k8s manifests → deploys app
+```
+
+🔹 Step 6 — Verify Deployment
+
+Check in ArgoCD UI:
+
+You should see:
+
+- Healthy ✅
+- Synced ✅
+  
+Check in terminal:
+```
+kubectl get pods -n bankapp-namespace
+```
+
+**👉 Expect:**
+
+- bank-app → Running
+- mystatefulset → Running
+
+### ⚠️ Important Checks
+-  Replica count should be 1
+-  docker image in deployment must match Jenkins build image
+-  bankapp-namespace must exist
+
+## 1️⃣3️⃣  Run Jenkins Pipeline (CI → GitOps Trigger)
+
+**🔹 What’s already done**
+- Jenkins installed & configured ✅
+- Plugins + creds + Sonar + Trivy ✅
+- Repo already contains Jenkinsfile ✅
+- ArgoCD app already created & synced ✅
+- 
+### 🔹 Step 1 — Create Pipeline Job
+
+In Jenkins:
+
+**New Item → Pipeline → Enter name → OK**
+
+### 🔹 Step 2 — Connect Repo
+
+In pipeline config:
+
+- Select: Pipeline script from SCM
+- SCM: Git
+- Repo URL: <your-repo>
+- Credentials: github-creds
+- Script Path:
+    Jenkinsfile
+
+Save.
+
+### 🔹 Step 3 — Run Pipeline
+
+Click:
+
+**Build Now**
+
+### Step 4 — What to Observe
+
+Pipeline should execute:
+
+**Build → Scan → Push → Update → Commit**
+
+### 🔹 Step 5 — Verify Results
+- in DockerHub the image should be pushed
+- in Github deployment.yml should be updated
+- In ArgoCD , **App → OutOfSync → Sync → Healthy**
+- in Kubernetes , check if new pods have created or not
+  
+
+## 1️⃣4️⃣ Monitoring Setup (Prometheus + Grafana)
+
+#### 🔹 Goal
+
+**Observe cluster + application health in real-time**
+
+Track:
+
+- CPU usage
+- Memory usage
+- Pod health
+- Restarts
+  
+### 🔹 Step 1 — Install Monitoring Stack (Helm)
+
+#### Add repo
+```
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+```
+
+#### Install stack
+```
+helm install monitoring prometheus-community/kube-prometheus-stack \
+-n monitoring --create-namespace
+```
+
+**Verify**
+```
+kubectl get pods -n monitoring
+```
+
+👉 Wait until:
+
+**All pods → Running**
+
+### 🔹 Step 2 — Access Grafana
+
+#### Expose Grafana
+```
+kubectl patch svc monitoring-grafana -n monitoring -p '{
+  "spec": {"type": "NodePort"}
+}'
+```
+#### Get port
+```
+kubectl get svc monitoring-grafana -n monitoring
+```
+
+#### Open in browser
+```
+http://<EC2-IP>:<NODEPORT>
+```
+
+#### Get login password
+```
+kubectl get secret monitoring-grafana -n monitoring \
+-o jsonpath="{.data.admin-password}" | base64 -d
+```
+**Login**
+
+- Username: admin
+- Password: <above>
+
+### 🔹 Step 3 — View Dashboards
+
+Go to:
+```
+Dashboards → Browse
+```
+
+Use:
+```
+Kubernetes / Compute Resources / Pod
+```
+
+🔹 Select your app
+- Namespace: bankapp-namespace
+- Pod: bank-app-*
+  
+#### What to Observe
+
+- CPU usage
+- Memory usage
+- Pod restarts
+- Network usage
+
+## 1️⃣5️⃣  Final Stage — Project Completion Checklist
+
+Before closing, confirm these:
+
+- App runs via ArgoCD ✅
+- Pipeline builds & updates image ✅
+- GitOps sync works ✅
+- Monitoring dashboards visible ✅
+- Jenkins + Sonar + Trivy integrated ✅
+
+## 1️⃣6️⃣ Final Flow Summary 
+```
+Developer → Git Push
+        ↓
+     Jenkins (CI)
+        ↓
+Build + Scan + Push Image
+        ↓
+Update Kubernetes Manifest (Git)
+        ↓
+ArgoCD detects change
+        ↓
+Deploys to Kubernetes
+        ↓
+Prometheus collects metrics
+        ↓
+Grafana visualizes system health
+```
+
+## 1️⃣7️⃣Key Learnings
+
+- Implemented end-to-end CI/CD pipeline using Jenkins
+- Used GitOps (ArgoCD) for declarative deployments
+- Deployed stateful and stateless apps on Kubernetes (k3s)
+- Integrated monitoring using Prometheus and Grafana
+- Implemented security scanning using Trivy
+- Solved real-world issues like session handling in multi-pod setup
+
+## 1️⃣8️⃣ Future Improvements (Short, clean)
+
+- Add Dev/Prod environments 
+- Implement alerting (Grafana/Prometheus)
+- Use Ingress with domain + TLS
+
