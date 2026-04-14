@@ -154,3 +154,140 @@ sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 sudo apt-get install docker.io -y
 sudo apt-get install kubectl -y
 ```
+## 4️⃣ Jenkins Configuration (Plugins, Tools, Security)
+### 4.1 Install Required Jenkins Plugins
+
+#### Go to:
+
+**Manage Jenkins → Manage Plugins → Available Plugins**
+
+### Install:
+
+- Pipeline
+- Git
+- GitHub Integration
+- Docker Pipeline
+- Credentials Binding
+- SonarQube Scanner
+- Pipeline Stage View
+
+
+**👉 Click:**
+
+Install without restart
+
+### 4.2 Restart Jenkins (Important)
+
+After installation:
+```
+sudo systemctl restart jenkins
+```
+
+### 4.3 Verify Jenkins is Ready
+
+Open:
+```
+http://<EC2-IP>:8080
+```
+**👉 Ensure:**
+
+- Dashboard loads
+- No plugin errors
+
+## 5️⃣ Credentials Management 
+  
+### 5.1 Navigate to Credentials
+
+**Manage Jenkins → Credentials → Global → Add Credentials**
+
+### 5.2 Add Required Credentials
+
+🔹 DockerHub Credentials
+- Kind: Username & Password
+- ID: docker-creds
+
+🔹 GitHub Credentials
+- Kind: Personal Access Token
+- ID: github-creds
+
+🔹 SonarQube Token (we’ll generate next)
+- Kind: Secret Text
+- ID: sonar-token
+- 
+## 6️⃣ SonarQube Setup 
+
+### 6.1 Run SonarQube Server
+```
+docker run -d --name sonarqube -p 9000:9000 sonarqube:lts
+```
+
+### 6.2 Access SonarQube
+```
+http://<EC2-IP>:9000
+```
+
+**Login:**
+
+admin / admin 
+
+👉 Change password immediately
+
+### 6.3 Generate Sonar Token
+
+**User → My Account → Security → Generate Token**
+
+- Name: jenkins-token
+- Copy token
+- 
+### 6.4 Add Token to Jenkins
+
+**Go back to Jenkins → Credentials:**
+
+- Kind: Secret Text
+- ID: sonar-token
+- Paste token
+  
+### 6.5 Configure SonarQube in Jenkins
+
+Go to:
+
+**Manage Jenkins → Configure System**
+
+Find:
+
+**SonarQube Servers → Add**
+
+Fill:
+
+- Name: sonar-server
+- URL: http://<EC2-IP>:9000
+- Token: sonar-token
+
+Save.
+
+## 7️⃣ Trivy Setup
+
+### 7.1 Install Trivy
+```
+sudo apt-get install wget -y
+wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.42.0_Linux-64bit.deb
+sudo dpkg -i trivy_0.42.0_Linux-64bit.deb
+```
+### 7.2 Verify Installation
+```
+trivy --version
+```
+
+## 8️⃣ Global Tool Configuration
+
+Go to:
+
+**Manage Jenkins → Global Tool Configuration**
+
+Configure:
+🔹 Git
+- Path: /usr/bin/git
+
+🔹 Sonar Scanner
+- Name: sonar-scanner
+- Install automatically
